@@ -15,23 +15,11 @@ from svglib.svglib import svg2rlg
 from reportlab.pdfgen import canvas
 
 
+class MuseScoreAuthenticationError(Exception):
+    pass
+
+
 class Score:
-    @staticmethod
-    def _get_auth_header(mp3=False):
-        """
-        Retrieves the authorization header value required to make requests to MuseScore on behalf of the client
-
-        :return: The request Authorization header value
-        """
-        url = "https://musescore.com/static/public/build/musescore_es6/jmuse_embed.153b5b4b18e48ffaf666b76cd33f6de4.js"
-        res = requests.get(url).text
-        return re.findall(r"[a-zA-Z0-9]{40}", res)[-(1 + mp3)]  # Just awful
-
-    _auth_headers = {
-        "sheet": _get_auth_header(mp3=False),
-        "mp3": _get_auth_header(mp3=True)
-    }
-
     def __init__(self, json_data: dict) -> None:
         """
         Creates a new Score object populated with the data from a MuseScore search result.
@@ -43,13 +31,37 @@ class Score:
         self.title = json_data["title"].replace("[b]", "").replace("[/b]", "")
         self.desc = json_data["description"]
         self.id = json_data["id"]
+        self.user_id = json_data["user"]["id"]
         self.n_pages = json_data["pages_count"]
+
+        self._auth_headers = self._get_auth_headers()
+
+    def _get_auth_headers(self) -> dict[str]:
+        """
+        Retrieves the authorization header value required to make requests to MuseScore on behalf of the client
+
+        :return: The request Authorization header value
+        """
+        musescore_embed_url = f"https://musescore.com/user/{self.user_id}/scores/{self.id}/embed"
+        embed_content = requests.get(musescore_embed_url).content
+        soup = bs4.BeautifulSoup(embed_content, "lxml")
+
+        # This might become unreliable in the future because it would break if the script import order is changed
+        # or new 40-character strings are introduced into the script. Sadly, it's all I could come up with because
+        # the auth keys are hardcoded into the scripts making the api calls.
+        jmuse_script_url = soup.find_all("script")[-1]["src"]
+        api_keys = re.findall(r"[a-zA-Z0-9]{40}", requests.get(jmuse_script_url).text)[-2:]
+
+        return {
+            "mp3": api_keys[0],
+            "sheet": api_keys[1]
+        }
 
     def __repr__(self):
         return self.title
 
     @staticmethod
-    def _download_file(url: str, file: io.BytesIO | tempfile.TemporaryFile, chunk_size=1024) -> None:
+    def _download_file(url: str, file: io.BytesIO | tempfile.TemporaryFile, chunk_size=8192) -> None:
         """
         Downloads an online file to a given path
 
@@ -133,7 +145,7 @@ class Score:
             path = f"{self.name}.mp3"
 
         with open(path, "wb") as f:
-            self._download_file(self._get_mp3_url(), f, chunk_size=8192)
+            self._download_file(self._get_mp3_url(), f)
 
 
 def search_scores(q: str) -> list[Score]:
@@ -153,5 +165,6 @@ def search_scores(q: str) -> list[Score]:
 
 
 if __name__ == "__main__":
-    score = search_scores("the suburbs arcade fire")[0]
+    score = search_scores("four out of five")[0]
+    print(f"downloading {score.title}")
     score.download()
