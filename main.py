@@ -1,63 +1,58 @@
 from __future__ import annotations
 
-import os
-import random
-import string
-import typing
-
-"""
-{
-"publisher": null,
-"is_official": false,
-"body": "Basically just copied it. I tried to make it playable for like an intermediate pianist. feel free to change rhythms. I also tried to make it less boring and add a swing in left hand if too hard change to regular quarter note. This is my first \"arrangement\" but I really just copied it. Hope someone enjoys it.",
-"tags": [],
-"is_downloadable": 1,
-"is_blocked": false,
-"license": "all-rights-reserved",
-"instrumentation_id": 0,
-"is_original": false,
-"measures": 122,
-"keysig": "D major, B minor",
-"license_id": 9,
-"license_version": "4.0",
-"song_name": "the suburbs",
-"artist_name": "Arcade Fire",
-"complexity": 2,
-"_links": {
-    "self": {
-    "href": "https://musescore.com/user/20720841/scores/4000056"
-    }
-}
-}
-"""
-
 import json
-import sys
-
+import os
+import re
+import typing
 import urllib.parse
-import bs4
 
+import bs4
 import requests
 
 
 class Score:
-    def __init__(self, name: str, artist: str, full_title: str, description: str, url: str) -> None:
-        self._name = name
-        self._artist = artist
-        self._title = full_title
-        self._desc = description
-        self._url = url
-        self._id = url.split("/")[-1]
+    def __init__(self, json_data: dict) -> None:
+        """
+        Creates a new Score object populated with the data from a MuseScore search result.
+
+        :param json_data: The MuseScore search result json data
+        """
+        self._name = json_data["song_name"]
+        self._artist = json_data["artist_name"]
+        self._title = json_data["title"].replace("[b]", "").replace("[/b]", "")
+        self._desc = json_data["description"]
+        self._id = json_data["id"]
+        self._n_pages = json_data["pages_count"]
 
     def __repr__(self):
         return self._title
 
-    def get_sheet_svgs(self):
-        res = requests.get(self._url)
-        soup = bs4.BeautifulSoup(res.text, "lxml")
-        return soup.findAll("div", attrs={"class": "vAVs3"})
+    @staticmethod
+    def _get_auth_header(mp3=False):
+        """
+        Retrieves the authorization header value required to make requests to MuseScore on behalf of the client
 
-    def _get_mp3_url(self, auth) -> str:
+        :return: The 'Authorization' request header value
+        """
+        url = "https://musescore.com/static/public/build/musescore_es6/jmuse_embed.153b5b4b18e48ffaf666b76cd33f6de4.js"
+        res = requests.get(url).text
+        return re.findall(r"[a-zA-Z0-9]{40}", res)[-(1 + mp3)]  # Just awful
+
+    def _get_sheet_url(self, auth: str, page: int):
+        res = requests.get(
+            f"https://musescore.com/api/jmuse?id={self._id}&index={page}&type=img&v2=1",
+            headers={"Authorization": auth}
+        )
+
+        return res.json()
+
+    def get_sheet_svgs(self):
+        auth = self._get_auth_header()
+        sheet_urls = [self._get_sheet_url(auth, i) for i in range(self._n_pages)]
+
+        return sheet_urls
+
+    def _get_mp3_url(self, auth: str) -> str:
         res = requests.get(
             f"https://musescore.com/api/jmuse?id={self._id}&index=0&type=mp3&v2=1",
             headers={"Authorization": auth}
@@ -68,27 +63,17 @@ class Score:
 
         return res.json()["info"]["url"]
 
-    def download_mp3(self, auth: str, path: typing.Union[str, bytes, os.PathLike]) -> None:
+    def download_mp3(self, path: typing.Union[str, bytes, os.PathLike]) -> None:
         """
         Downloads a synthesized version of the score as an mp3 to a given location
 
         :param path: The path to write the mp3 file to
         """
-        mp3_url = self._get_mp3_url(auth)
+        mp3_url = self._get_mp3_url(self._get_auth_header(mp3=True))
         mp3 = requests.get(mp3_url)
 
         with open(path, "wb") as f:
             f.write(mp3.content)
-
-    @staticmethod
-    def from_json(score: dict) -> Score:
-        song_name = score["song_name"]
-        artist_name = score["artist_name"]
-        title = score["title"].replace("[b]", "").replace("[/b]", "")
-        description = score["description"]
-        score_url = score["_links"]["self"]["href"]
-
-        return Score(song_name, artist_name, title, description, score_url)
 
 
 def search_scores(q: str) -> list[Score]:
@@ -104,13 +89,13 @@ def search_scores(q: str) -> list[Score]:
     results = soup.find("div", attrs={"class": "js-store"})["data-content"]
     scores_json = json.loads(results)["store"]["page"]["data"]["scores"]
 
-    return [Score.from_json(result) for result in scores_json]
+    return [Score(result) for result in scores_json]
 
 
 if __name__ == "__main__":
-    results = search_scores("the suburbs")
+    results = search_scores("the suburbs arcade fire")
 
     score = results[0]
-    print(score.get_sheet_svgs())
-    uuid = "".join(random.choice(string.ascii_lowercase + string.digits) for i in range(40))
-    score.download_mp3("", "./the-suburbs-piano.mp3")
+    sheets = score.get_sheet_svgs()
+    print(sheets, len(sheets))
+    # score.download_mp3("./45.mp3")
