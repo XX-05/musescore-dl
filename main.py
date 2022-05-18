@@ -1,22 +1,13 @@
-from __future__ import annotations
-
 import io
 import json
-import os
 import re
 import tempfile
-import urllib.parse
 
 import bs4
 import reportlab.graphics.shapes
+import reportlab.pdfgen.canvas
 import requests
-
-from svglib.svglib import svg2rlg
-from reportlab.pdfgen import canvas
-
-
-class MuseScoreAuthenticationError(Exception):
-    pass
+import svglib.svglib
 
 
 class Score:
@@ -46,22 +37,20 @@ class Score:
         embed_content = requests.get(musescore_embed_url).content
         soup = bs4.BeautifulSoup(embed_content, "lxml")
 
-        # This might become unreliable in the future because it would break if the script import order is changed
-        # or new 40-character strings are introduced into the script. Sadly, it's all I could come up with because
-        # the auth keys are hardcoded into the scripts making the api calls.
+        # This could break in the future if the script import order is changed or new 40-character strings are
+        #  introduced into the script. Sadly, it's all I could come up with because the auth keys are hardcoded
+        #  in the scripts making the api calls.
         jmuse_script_url = soup.find_all("script")[-1]["src"]
-        api_keys = re.findall(r"[a-zA-Z0-9]{40}", requests.get(jmuse_script_url).text)[-2:]
+        jmuse_script = requests.get(jmuse_script_url)
+        api_keys = re.findall(r"[a-zA-Z0-9]{40}", jmuse_script.text)[-2:]
 
-        return {
-            "mp3": api_keys[0],
-            "sheet": api_keys[1]
-        }
+        return {"mp3": api_keys[0], "sheet": api_keys[1]}
 
     def __repr__(self):
         return self.title
 
     @staticmethod
-    def _download_file(url: str, file: io.BytesIO | tempfile.TemporaryFile, chunk_size=8192) -> None:
+    def _download_file(url: str, file: io.BytesIO | tempfile.TemporaryFile, chunk_size: int = 8192) -> None:
         """
         Downloads an online file to a given path
 
@@ -80,8 +69,14 @@ class Score:
         :return: The url of the score page
         """
         res = requests.get(
-            f"https://musescore.com/api/jmuse?id={self.id}&index={page}&type=img&v2=1",
-            headers={"Authorization": self._auth_headers["sheet"]}
+            f"https://musescore.com/api/jmuse",
+            headers={"Authorization": self._auth_headers["sheet"]},
+            params={
+                "id": self.id,
+                "index": page,
+                "type": "img",
+                "v2": 1
+            }
         )
 
         if res.status_code != 200:
@@ -100,17 +95,18 @@ class Score:
             self._download_file(self._get_page_url(page), f)
             f.seek(0)
 
-            return svg2rlg(f.name)
+            return svglib.svglib.svg2rlg(f.name)
 
-    def download(self, path: str | bytes | os.PathLike = None) -> None:
+    def download(self, path: str | bytes = None) -> None:
         """
         Downloads the full score as a pdf to a given location
 
-        :param path: The filepath to write the score into
+        :param path: The filepath to write the score to
         """
-        path = f"{self.name}.pdf" if path is None else path
+        if path is None:
+            path = f"{self.name}.pdf"
 
-        c = canvas.Canvas(path)
+        c = reportlab.pdfgen.canvas.Canvas(path)
         for i in range(self.n_pages):
             page = self._get_page_svg(i)
             page.drawOn(c, 0, 0)
@@ -125,8 +121,14 @@ class Score:
         :return: The audio file url
         """
         res = requests.get(
-            f"https://musescore.com/api/jmuse?id={self.id}&index=0&type=mp3&v2=1",
-            headers={"Authorization": self._auth_headers["mp3"]}
+            f"https://musescore.com/api/jmuse",
+            headers={"Authorization": self._auth_headers["mp3"]},
+            params={
+                "id": self.id,
+                "index": 0,
+                "type": "mp3",
+                "v2": 1
+            }
         )
 
         if res.status_code != 200:
@@ -134,7 +136,7 @@ class Score:
 
         return res.json()["info"]["url"]
 
-    def download_mp3(self, path: str | bytes | os.PathLike = None) -> None:
+    def download_mp3(self, path: str | bytes) -> None:
         """
         Downloads a synthesized version of the score as an mp3 to a given location
 
@@ -155,9 +157,9 @@ def search_scores(q: str) -> list[Score]:
     :param q: The search query string
     :return: A list of result Score(s)
     """
-    res = requests.get(f"https://musescore.com/sheetmusic?text={urllib.parse.quote_plus(q)}")
-
+    res = requests.get("https://musescore.com/sheetmusic", params={"text": q})
     soup = bs4.BeautifulSoup(res.text, "lxml")
+
     results = soup.find("div", attrs={"class": "js-store"})["data-content"]
     scores_json = json.loads(results)["store"]["page"]["data"]["scores"]
 
