@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+import os.path
 import re
 import tempfile
 import typing
@@ -8,6 +11,20 @@ import reportlab.graphics.shapes
 import reportlab.pdfgen.canvas
 import requests
 import svglib.svglib
+
+
+def _get_js_store_scores(html: str, multiple=True) -> dict | list:
+    """
+    Returns the information contained in the 'js-store' tag of a MuseScore page
+
+    :param html: The html content of the page containing the 'js-store'
+    :return: The information contained in the js-store tag
+    """
+    soup = bs4.BeautifulSoup(html, "lxml")
+    js_store = soup.find("div", attrs={"class": "js-store"})["data-content"]
+    store_data = json.loads(js_store)["store"]["page"]["data"]
+
+    return store_data["scores"] if multiple else store_data["score"]
 
 
 class Score:
@@ -103,22 +120,22 @@ class Score:
 
             return svglib.svglib.svg2rlg(f.name)
 
-    def download(self, path: str | bytes = None) -> None:
+    def download(self, path: str | bytes) -> str:
         """
         Downloads the full score as a pdf to a given location
 
-        :param path: The filepath to write the score to
+        :param path: The path to write the score to
+        :return: The path of the downloaded score
         """
-        if path is None:
-            path = f"{self.name}.pdf"
-
         c = reportlab.pdfgen.canvas.Canvas(path)
+
         for i in range(self.n_pages):
             page = self._get_page_svg(i)
             page.drawOn(c, 0, 0)
             c.showPage()
 
         c.save()
+        return path
 
     def _get_mp3_url(self) -> str:
         """
@@ -154,6 +171,19 @@ class Score:
         with open(path, "wb") as f:
             self._download_file(self._get_mp3_url(), f)
 
+    @staticmethod
+    def from_url(url: str):
+        """
+        Creates a new Score object from its url populated with its MuseScore listing information
+
+        :param url: The url of the score
+        :return: A new Score object containing its MuseScore information
+        """
+        res = requests.get(url)
+        score_data = _get_js_store_scores(res.text, multiple=False)
+
+        return Score(score_data)
+
 
 def search_scores(q: str) -> list[Score]:
     """
@@ -164,9 +194,6 @@ def search_scores(q: str) -> list[Score]:
     """
     # TODO: Figure out how to speed up this method
     res = requests.get("https://musescore.com/sheetmusic", params={"text": q})
-    soup = bs4.BeautifulSoup(res.text, "lxml")
-
-    results = soup.find("div", attrs={"class": "js-store"})["data-content"]
-    scores_json = json.loads(results)["store"]["page"]["data"]["scores"]
+    scores_json = _get_js_store_scores(res.text)
 
     return [Score(result) for result in scores_json]

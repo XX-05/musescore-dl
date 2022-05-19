@@ -1,5 +1,6 @@
 beautifulsoup4==4.11.1
+click==8.1.3
+colorama==0.4.4
 lxml==4.8.0
 requests==2.27.1
 svglib==1.2.1
-reportlab~=3.6.9
