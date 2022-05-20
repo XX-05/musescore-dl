@@ -5,18 +5,18 @@ import questionary
 import musescoredl
 
 
-def _dl_score(score: musescoredl.Score, dl_path: str, dl_type: str):
+def _dl_score(score: musescoredl.Score, dl_path: str):
     click.echo("Downloading " + click.style(f"{score.name.title()} by {score.artist}", fg='blue'))
 
-    match dl_type:
-        case "pdf":
-            dl_path = dl_path + ".pdf"
-            score.download(dl_path)
-        case "mp3":
-            dl_path = dl_path + ".mp3"
-            score.download_mp3(dl_path)
+    formats = questionary.checkbox("Select a format", choices=["mp3", "pdf"]).ask()
 
-    click.echo("Finished writing " + click.style(f"'{dl_path}'", fg='green'))
+    if "pdf" in formats:
+        score.download(dl_path + ".pdf")
+        click.echo("Finished writing " + click.style(f"'{dl_path}.pdf'", fg='green'))
+
+    if "mp3" in formats:
+        score.download_mp3(dl_path + ".mp3")
+        click.echo("Finished writing " + click.style(f"'{dl_path}.mp3'", fg='green'))
 
 
 @click.group(invoke_without_command=True)
@@ -35,13 +35,10 @@ def search(query):
 
     dl_path = pathlib.Path(
         click.prompt("Write Directory", default="."),
-        click.prompt("Name", default=f"{score.title}.pdf").split(".")[0]
+        click.prompt("Name (no suffix)", default=score.title)
     )
     dl_path.parent.mkdir(exist_ok=True, parents=True)
-
-    formats = questionary.checkbox("Select a format", choices=["mp3", "pdf"]).ask()
-    for method in formats:
-        _dl_score(score, str(dl_path), method)
+    _dl_score(score, str(dl_path))
 
 
 @cli.command()
@@ -51,7 +48,7 @@ def search(query):
 def get(url, name, out_dir):
     result = musescoredl.Score.from_url(url)
     if name is None:
-        name = f"{result.name}.pdf"
+        name = f"{result.name}"
     if out_dir is not None:
         pathlib.Path(out_dir).mkdir(exist_ok=True, parents=True)
 
