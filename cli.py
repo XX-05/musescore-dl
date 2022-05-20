@@ -7,7 +7,6 @@ import musescoredl
 
 def _dl_score(score: musescoredl.Score, dl_path: str):
     click.echo("Downloading " + click.style(f"{score.name.title()} by {score.artist}", fg='blue'))
-
     formats = questionary.checkbox("Select a format", choices=["mp3", "pdf"]).ask()
 
     if "pdf" in formats:
@@ -46,7 +45,8 @@ def search(query):
 @click.option("--name", default=None, type=click.Path(file_okay=False, dir_okay=False))
 @click.option("--dir", "out_dir", default=".", type=click.Path())
 def get(url, name, out_dir):
-    result = musescoredl.Score.from_url(url)
+    result = musescoredl.get_score_from_url(url)
+
     if name is None:
         name = f"{result.name}"
     if out_dir is not None:

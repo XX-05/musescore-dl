@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import os.path
 import re
 import tempfile
 import typing
 
 import bs4
 import reportlab.graphics.shapes
+import reportlab.lib.pagesizes
 import reportlab.pdfgen.canvas
 import requests
 import svglib.svglib
@@ -127,14 +127,17 @@ class Score:
         :param path: The path to write the score to
         :return: The path of the downloaded score
         """
-        c = reportlab.pdfgen.canvas.Canvas(path)
+        page_size = reportlab.lib.pagesizes.A4
+        c = reportlab.pdfgen.canvas.Canvas(path, pagesize=page_size)
 
         for i in range(self.n_pages):
             page = self._get_page_svg(i)
+            # resize the score to fit the page perfectly
+            page.scale(page_size[0] / page.width, page_size[1] / page.height)
             page.drawOn(c, 0, 0)
             c.showPage()
-
         c.save()
+
         return path
 
     def _get_mp3_url(self) -> str:
@@ -171,19 +174,6 @@ class Score:
         with open(path, "wb") as f:
             self._download_file(self._get_mp3_url(), f)
 
-    @staticmethod
-    def from_url(url: str):
-        """
-        Creates a new Score object from its url populated with its MuseScore listing information
-
-        :param url: The url of the score
-        :return: A new Score object containing its MuseScore information
-        """
-        res = requests.get(url)
-        score_data = _get_js_store_scores(res.text, multiple=False)
-
-        return Score(score_data)
-
 
 def search_scores(q: str) -> list[Score]:
     """
@@ -197,3 +187,16 @@ def search_scores(q: str) -> list[Score]:
     scores_json = _get_js_store_scores(res.text)
 
     return [Score(result) for result in scores_json]
+
+
+def get_score_from_url(url: str):
+    """
+    Creates a new Score object from its url populated with its MuseScore listing information
+
+    :param url: The url of the score
+    :return: A new Score object containing its MuseScore information
+    """
+    res = requests.get(url)
+    score_data = _get_js_store_scores(res.text, multiple=False)
+
+    return Score(score_data)
