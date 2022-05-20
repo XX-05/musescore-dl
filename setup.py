@@ -7,7 +7,7 @@ setup(
     install_requires=["beautifulsoup4", "lxml", "requests", "svglib"],
     entry_points={
         "console_scripts": [
-            "musescore-dl = cli:cli",
+            "musescore-dl = musescoredl:cli",
         ],
     },
 )
