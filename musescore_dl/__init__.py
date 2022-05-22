@@ -5,7 +5,14 @@ import questionary
 from . import jmuse
 
 
-def _dl_score(score: jmuse.Score, dl_path: str):
+def _dl_score(score: jmuse.Score, dl_path: str) -> None:
+    """
+    Prompts the user to decide the score format(s) (i.e. pdf or mp3) and downloads it with console output
+
+    :param score: The Score object to download
+    :param dl_path: The filepath to write the score at. A file extension should not be included in the dl_path
+                    because it is automatically added depending on the format(s) selected by the user.
+    """
     click.echo("Downloading " + click.style(score.title.title(), fg='blue') + " from " + click.style(score.url, fg="blue"))
     formats = questionary.checkbox("Select a format", choices=["mp3", "pdf"]).ask()
 
@@ -20,12 +27,20 @@ def _dl_score(score: jmuse.Score, dl_path: str):
 
 @click.group()
 def cli():
+    """
+    The CLI entrypoint
+    """
     pass
 
 
 @cli.command()
 @click.argument("query")
-def search(query):
+def search(query) -> None:
+    """
+    Searches MuseScore for a query score
+
+    :param query: The term to search for scores by
+    """
     results = jmuse.search_scores(query)
     # filter official scores out of the search results because they cannot currently be downloaded
     choices = [questionary.Choice(f"{r.title} (id: {r.id})", r) for r in results if not r.is_official]
@@ -46,7 +61,14 @@ def search(query):
 @click.argument("url")
 @click.option("--name", default=None, type=click.Path(file_okay=False, dir_okay=False))
 @click.option("--dir", "out_dir", default=".", type=click.Path())
-def get(url, name, out_dir):
+def get(url, name, out_dir) -> None:
+    """
+    Downloads a score given its url and a write path
+
+    :param url: The url of the score
+    :param name: The filename to download the score as
+    :param out_dir: The directory to download the score in
+    """
     result = jmuse.get_score_from_url(url)
 
     if name is None:

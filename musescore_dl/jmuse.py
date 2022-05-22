@@ -208,10 +208,3 @@ def get_score_from_url(url: str):
     score_data = _get_js_store_scores(res.text, multiple=False)
 
     return Score(score_data)
-
-
-if __name__ == "__main__":
-    score = get_score_from_url("https://musescore.com/official_scores/scores/6963180")
-    score.download("american_pie.pdf")
-    print(score.n_pages)
-
