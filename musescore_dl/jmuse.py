@@ -39,13 +39,12 @@ class Score:
 
         :param json_data: The MuseScore search result json data
         """
-        self.name = json_data["song_name"]
-        self.artist = json_data["artist_name"]
         self.title = json_data["title"].replace("[b]", "").replace("[/b]", "")
         self.desc = json_data["description"]
         self.id = json_data["id"]
         self.user_id = json_data["user"]["id"]
         self.n_pages = json_data["pages_count"]
+        self.url = json_data["url"]
 
         # TODO: Cache auth headers - as they are not unique to one score and are expensive to retrieve
         self._auth_headers = self._get_auth_headers()
@@ -63,7 +62,7 @@ class Score:
         # This could break in the future if the script import order is changed or new 40-character strings are
         #  introduced into the script. Sadly, it's all I could come up with because the auth keys are hardcoded
         #  in the scripts making the api calls.
-        jmuse_script_url = soup.find_all("script")[-1]["musescore_dl"]
+        jmuse_script_url = soup.find_all("script")[-1]["src"]
         jmuse_script = requests.get(jmuse_script_url)
         api_keys = re.findall(r"[a-zA-Z0-9]{40}", jmuse_script.text)[-2:]
 
@@ -177,7 +176,7 @@ class Score:
         :param path: The path to write the mp3 file to
         """
         if path is None:
-            path = f"{self.name}.mp3"
+            path = f"{self.title}.mp3"
 
         with open(path, "wb") as f:
             self._download_file(self._get_mp3_url(), f)

@@ -4,3 +4,4 @@ colorama==0.4.4
 lxml==4.8.0
 requests==2.27.1
 svglib==1.2.1
+questionary==1.10.0

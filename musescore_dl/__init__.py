@@ -2,11 +2,11 @@ import pathlib
 
 import click
 import questionary
-import jmuse
+from . import jmuse
 
 
 def _dl_score(score: jmuse.Score, dl_path: str):
-    click.echo("Downloading " + click.style(f"{score.name.title()} by {score.artist}", fg='blue'))
+    click.echo("Downloading " + click.style(score.title.title(), fg='blue') + " from " + click.style(score.url, fg="blue"))
     formats = questionary.checkbox("Select a format", choices=["mp3", "pdf"]).ask()
 
     if "pdf" in formats:
@@ -51,7 +51,3 @@ def get(url, name, out_dir):
         pathlib.Path(out_dir).mkdir(exist_ok=True, parents=True)
 
     _dl_score(result, str(pathlib.Path(out_dir, name)))
-
-
-if __name__ == "__main__":
-    cli()
