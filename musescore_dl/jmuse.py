@@ -63,7 +63,7 @@ class Score:
         # This could break in the future if the script import order is changed or new 40-character strings are
         #  introduced into the script. Sadly, it's all I could come up with because the auth keys are hardcoded
         #  in the scripts making the api calls.
-        jmuse_script_url = soup.find_all("script")[-1]["src"]
+        jmuse_script_url = soup.find_all("script")[-1]["musescore_dl"]
         jmuse_script = requests.get(jmuse_script_url)
         api_keys = re.findall(r"[a-zA-Z0-9]{40}", jmuse_script.text)[-2:]
 
