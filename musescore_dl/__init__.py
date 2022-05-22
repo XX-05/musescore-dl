@@ -27,8 +27,12 @@ def cli():
 @click.argument("query")
 def search(query):
     results = jmuse.search_scores(query)
-    choices = [questionary.Choice(r.title, r) for r in results]
-    score = questionary.select("Search Results", choices=choices).ask()
+    # filter official scores out of the search results because they cannot currently be downloaded
+    choices = [questionary.Choice(f"{r.title} (id: {r.id})", r) for r in results if not r.is_official]
+    score = questionary.select("Search Results", choices=choices, qmark="").ask()
+
+    if score is None:
+        return
 
     dl_path = pathlib.Path(
         click.prompt("Write Directory", default="."),

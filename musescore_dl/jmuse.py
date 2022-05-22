@@ -45,6 +45,7 @@ class Score:
         self.user_id = json_data["user"]["id"]
         self.n_pages = json_data["pages_count"]
         self.url = json_data["url"]
+        self.is_official = json_data["is_official"]
 
         # TODO: Cache auth headers - as they are not unique to one score and are expensive to retrieve
         self._auth_headers = self._get_auth_headers()
@@ -207,3 +208,10 @@ def get_score_from_url(url: str):
     score_data = _get_js_store_scores(res.text, multiple=False)
 
     return Score(score_data)
+
+
+if __name__ == "__main__":
+    score = get_score_from_url("https://musescore.com/official_scores/scores/6963180")
+    score.download("american_pie.pdf")
+    print(score.n_pages)
+
