@@ -3,6 +3,7 @@ from setuptools import setup
 setup(
     name="musescore-dl",
     version="0.1.0",
+    packages=["musescore_dl"],
     install_requires=[
         "beautifulsoup4",
         "lxml",
