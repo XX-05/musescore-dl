@@ -3,3 +3,4 @@
   - (i.e.)  https://musescore.com/official_scores/scores/6963180
 - [ ] Have option to output video file with audio and score synced and a moving cursor to show the current position
 - [ ] add pagination support for cli search
+- [x] speed up score search in jmuse.py by caching auth headers

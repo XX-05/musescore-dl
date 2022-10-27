@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
 import re
-import tempfile
 import typing
 
 import bs4
@@ -11,6 +11,9 @@ import reportlab.lib.pagesizes
 import reportlab.pdfgen.canvas
 import requests
 import svglib.svglib
+
+
+_AUTH_HEADERS = None
 
 
 def _get_js_store_scores(html: str, multiple=True) -> dict | list:
@@ -30,7 +33,7 @@ def _get_js_store_scores(html: str, multiple=True) -> dict | list:
 class Score:
     """
     A MuseScore score.
-    The Score object provides functionality to download the score itself as well as MuseScores' render of it.
+    The Score object provides functionality to download the score itself as well as MuseScore's render of it.
     """
 
     def __init__(self, json_data: dict) -> None:
@@ -47,8 +50,13 @@ class Score:
         self.url = json_data["url"]
         self.is_official = json_data["is_official"]
 
-        # TODO: Cache auth headers - as they are not unique to one score and are expensive to retrieve
-        self._auth_headers = self._get_auth_headers()
+        # Auth headers are cached
+        # as they are not unique to individual scores and are expensive to retrieve.
+        global _AUTH_HEADERS
+        if _AUTH_HEADERS is None:
+            _AUTH_HEADERS = self._get_auth_headers()
+        
+        self._auth_headers = _AUTH_HEADERS
 
     def _get_auth_headers(self) -> dict[str]:
         """
@@ -61,8 +69,8 @@ class Score:
         soup = bs4.BeautifulSoup(embed_content, "lxml")
 
         # This could break in the future if the script import order is changed or new 40-character strings are
-        #  introduced into the script. Sadly, it's all I could come up with because the auth keys are hardcoded
-        #  in the scripts making the api calls.
+        #  introduced into the script. However, since the auth keys are hardcoded into the script making the api calls,
+        #  this seems to be the best solution.
         jmuse_script_url = soup.find_all("script")[-1]["src"]
         jmuse_script = requests.get(jmuse_script_url)
         api_keys = re.findall(r"[a-zA-Z0-9]{40}", jmuse_script.text)[-2:]
@@ -75,10 +83,10 @@ class Score:
     @staticmethod
     def _download_file(url: str, file: typing.IO, chunk_size: int = 8192) -> None:
         """
-        Downloads an online file to a given path
+        Copies a file from a given URL into an IO stream
 
         :param url: The file url
-        :param file: A writable file object to put the url content into
+        :param file: A writable IO stream to copy the content into
         """
         with requests.get(url, stream=True) as content:
             for chunk in content.iter_content(chunk_size):
@@ -114,39 +122,37 @@ class Score:
         :param page: The page number to fetch
         :return: A reportlab Drawing of the score sheet
         """
-        with tempfile.NamedTemporaryFile(delete=True) as f:
-            page_url = self._get_page_url(page)
+        buffer = io.BytesIO()
+        page_url = self._get_page_url(page)
 
-            if page_url is None:
-                return None
+        if page_url is None:
+            return None
 
-            self._download_file(page_url, f)
-            f.seek(0)
+        self._download_file(page_url, buffer)
+        buffer.seek(0)
+        return svglib.svglib.svg2rlg(buffer)
 
-            return svglib.svglib.svg2rlg(f.name)
-
-    def download(self, path: str | bytes) -> str:
+    def download(self, file: str | bytes | io.IOBase):
         """
-        Downloads the full score as a pdf to a given location
+        Downloads the full score as a pdf
 
-        :param path: The path to write the score to
-        :return: The path of the downloaded score
+        :param file: A filepath or IO stream to write the score in
         """
         page_size = reportlab.lib.pagesizes.A4
-        c = reportlab.pdfgen.canvas.Canvas(path, pagesize=page_size)
+        canvas = reportlab.pdfgen.canvas.Canvas(file, pagesize=page_size)
+        canvas.setTitle(self.title)
 
         for i in range(self.n_pages):
             page = self._get_page_svg(i)
-            if page is None:  # For some reason, the page url wasn't returned by the jmuse api call
+            # For some reason, the page url wasn't returned by the jmuse api call
+            if page is None:
                 continue
-
             # fix svg sizing issues by resizing the score to fit the page
             page.scale(page_size[0] / page.width, page_size[1] / page.height)
-            page.drawOn(c, 0, 0)
-            c.showPage()
-        c.save()
+            page.drawOn(canvas, 0, 0)
+            canvas.showPage()
 
-        return path
+        canvas.save()
 
     def _get_mp3_url(self) -> str:
         """
@@ -170,17 +176,18 @@ class Score:
 
         return res.json()["info"]["url"]
 
-    def download_mp3(self, path: str | bytes = None) -> None:
+    def download_mp3(self, file: str | bytes | io.IOBase = None) -> None:
         """
         Downloads a synthesized version of the score as an mp3 to a given location
 
-        :param path: The path to write the mp3 file to
+        :param file: The filepath or IO stream to write the mp3 file to
         """
-        if path is None:
-            path = f"{self.title}.mp3"
+        if file is None:
+            file = open(f"{self.title}.mp3", "wb")
+        elif not isinstance(file, io.IOBase):
+            file = open(file, "wb")
 
-        with open(path, "wb") as f:
-            self._download_file(self._get_mp3_url(), f)
+        self._download_file(self._get_mp3_url(), file)
 
 
 def search_scores(q: str) -> list[Score]:
@@ -190,7 +197,6 @@ def search_scores(q: str) -> list[Score]:
     :param q: The search query string
     :return: A list of result Score(s)
     """
-    # TODO: Figure out how to speed up this method
     res = requests.get("https://musescore.com/sheetmusic", params={"text": q})
     scores_json = _get_js_store_scores(res.text)
 
